@@ -1,0 +1,44 @@
+[project]
+name = "dqpipe"
+version = "1.0.0"
+description = "A small orders ETL into DuckDB with data-quality checks that gate the load"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = ["duckdb>=2.0"]
+
+[project.scripts]
+dqpipe = "dqpipe.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=9.1", "pytest-cov>=7.1", "hypothesis>=6.170", "ruff>=0.17", "mypy>=2.4"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dqpipe"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S311", "S608", "S603"]
+"scripts/*" = ["S311"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests", "scripts"]
+
+[[tool.mypy.overrides]]
+module = ["duckdb.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

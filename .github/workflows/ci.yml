@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, types and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest --cov=dqpipe --cov-report=term-missing --cov-fail-under=90
+
+  pipeline:
+    name: Pipeline run (sample must pass, broken batch must be blocked)
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - name: Sample dataset passes the gate
+        run: uv run dqpipe data/sample --db warehouse.duckdb --run-at 2026-10-26T00:00:00+00:00 --json sample.json
+      - name: A batch with 15% bad rows is blocked by the quarantine-rate check
+        run: |
+          uv run python scripts/generate.py out/broken --bad-rate 0.15 --seed 11
+          set +e
+          uv run dqpipe out/broken --run-at 2026-10-26T00:00:00+00:00 --json broken.json
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then echo "::error::expected exit 1 for the broken batch, got $code"; exit 1; fi
+          python3 -c "import json,sys; c=[x['name'] for x in json.load(open('broken.json'))['checks'] if x['violations']]; sys.exit(0 if c==['run_quarantine_rate'] else f'unexpected failing checks: {c}')"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dq-results
+          path: |
+            sample.json
+            broken.json
